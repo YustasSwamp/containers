@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <string.h>
 #include "contain.h"
 
 static char *root;
@@ -18,7 +19,7 @@ static void bindnode(char *src, char *dst) {
   if ((fd = open(dst, O_WRONLY | O_CREAT, 0600)) >= 0)
     close(fd);
   if (mount(src, dst, NULL, MS_BIND, NULL) < 0)
-    error(1, 0, "Failed to bind %s into new /dev filesystem", src);
+    error(1, 0, "Failed to bind '%s' into '%s'", src, dst);
 }
 
 void cleanup(void) {
@@ -28,9 +29,33 @@ void cleanup(void) {
   }
 }
 
-void createroot(char *src, int console, char *helper) {
+static char *binditem(char *b, char **s, char **d) {
+  char *orig = b;
+
+  while (b && *b && strchr(",;", *b))
+    b++;
+  if (b == NULL || *b == '\0')
+    return NULL;
+  *s = b;
+  while (*b && *b != ':')
+    b++;
+  if (*b != ':')
+    error(1, 0, "Invalid bind format '%s'", orig);
+  *b++ = '\0';
+  *d = b;
+  while (*b && !strchr(",;:", *b))
+    b++;
+  if (*b == ':')
+    error(1, 0, "Invalid bind format '%s'", orig);
+  if (*b)
+    *b++ = '\0';
+  return b;
+}
+
+void createroot(char *src, int console, char *helper, char *bind) {
   mode_t mask;
   pid_t child;
+  char *bindsrc = NULL, *binddst = NULL;
 
   root = tmpdir();
   atexit(cleanup);
@@ -61,6 +86,9 @@ void createroot(char *src, int console, char *helper) {
   bindnode("/dev/urandom", "dev/urandom");
   bindnode("/dev/zero", "dev/zero");
   symlink("pts/ptmx", "dev/ptmx");
+
+  while ((bind = binditem(bind, &bindsrc, &binddst)))
+    bindnode(bindsrc, binddst);
 
   if (helper)
     switch (child = fork()) {

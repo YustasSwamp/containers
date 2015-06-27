@@ -18,12 +18,14 @@ void usage(char *progname) {
   fprintf(stderr, "\
 Usage: %s [OPTIONS] DIR [CMD [ARG]...]\n\
 Options:\n\
+  -b BND    bind host path into container\n\
   -c        disable console emulation in the container\n\
   -g MAP    set the container-to-host GID map\n\
   -i CMD    run a helper child inside the new namespaces\n\
   -n        share the host network unprivileged in the container\n\
   -o CMD    run a helper child outside the new namespaces\n\
   -u MAP    set the container-to-host UID map\n\
+BND is specified as HOST_DIR:CONTAINER_DIR[,HOST_DIR2:CONTAINER_DIR2]...\n\
 GID and UID maps are specified as START:LOWER:COUNT[,START:LOWER:COUNT]...\n\
 ", progname);
   exit(EX_USAGE);
@@ -31,11 +33,15 @@ GID and UID maps are specified as START:LOWER:COUNT[,START:LOWER:COUNT]...\n\
 
 int main(int argc, char **argv) {
   char *gidmap = NULL, *inside = NULL, *outside = NULL, *uidmap = NULL;
+  char *bind = NULL;
   int hostnet = 0, master, option, stdio = 0;
   pid_t child, parent;
 
-  while ((option = getopt(argc, argv, "+:cg:i:no:u:")) > 0)
+  while ((option = getopt(argc, argv, "+:b:cg:i:no:u:")) > 0)
     switch (option) {
+      case 'b':
+        bind = optarg;
+        break;
       case 'c':
         stdio++;
         break;
@@ -100,7 +106,7 @@ int main(int argc, char **argv) {
   setuid(0);
 
   master = stdio ? -1 : getconsole();
-  createroot(argv[optind], master, inside);
+  createroot(argv[optind], master, inside, bind);
 
   unshare(CLONE_NEWPID);
   switch (child = fork()) {
